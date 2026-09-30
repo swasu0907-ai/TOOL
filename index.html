@@ -1,0 +1,486 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重複檔案掃描與一鍵刪除工具</title>
+    <style>
+        :root {
+            --primary: #4F46E5;
+            --danger: #EF4444;
+            --bg: #F9FAFB;
+            --card: #FFFFFF;
+            --text: #1F2937;
+            --border: #E5E7EB;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            max-width: 950px;
+            margin: 40px auto;
+            padding: 0 20px;
+        }
+
+        .container {
+            background: var(--card);
+            border-radius: 12px;
+            padding: 24px;
+            box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 { margin-top: 0; color: #111827; }
+        p.subtitle { color: #6B7280; font-size: 0.95rem; margin-bottom: 20px; }
+
+        .drop-zone {
+            border: 2px dashed var(--primary);
+            border-radius: 8px;
+            padding: 30px;
+            text-align: center;
+            background-color: #EEF2FF;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: var(--primary);
+        }
+
+        .drop-zone:hover { background-color: #E0E7FF; }
+
+        .controls {
+            display: flex;
+            gap: 16px;
+            margin-top: 20px;
+            align-items: center;
+            flex-wrap: wrap;
+            background: #F3F4F6;
+            padding: 12px 16px;
+            border-radius: 8px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        select, button {
+            padding: 8px 12px;
+            border-radius: 6px;
+            border: 1px solid var(--border);
+            font-size: 0.9rem;
+        }
+
+        button.btn-danger { background-color: var(--danger); color: white; border: none; cursor: pointer; font-weight: 600; }
+        button:hover { opacity: 0.9; }
+
+        .progress-bar {
+            width: 100%;
+            height: 8px;
+            background-color: var(--border);
+            border-radius: 4px;
+            margin-top: 16px;
+            overflow: hidden;
+            display: none;
+        }
+
+        .progress {
+            width: 0%;
+            height: 100%;
+            background-color: var(--primary);
+            transition: width 0.1s;
+        }
+
+        .action-bar {
+            margin-top: 20px;
+            padding: 16px;
+            background: #FEF3C7;
+            border-radius: 8px;
+            display: none;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .result-group {
+            margin-top: 20px;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .group-header {
+            background: #F3F4F6;
+            padding: 10px 16px;
+            font-weight: bold;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 10px 16px;
+            border-top: 1px solid var(--border);
+            font-size: 0.85rem;
+        }
+
+        .file-info {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .file-meta {
+            color: #6B7280;
+            font-size: 0.8rem;
+            display: flex;
+            gap: 12px;
+        }
+
+        .tag {
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.75rem;
+            font-weight: 600;
+        }
+        .tag-img { background: #E0F2FE; color: #0369A1; }
+        .tag-pdf { background: #FEE2E2; color: #B91C1C; }
+        .tag-excel { background: #DCFCE7; color: #15803D; }
+        .tag-other { background: #F3F4F6; color: #374151; }
+        .tag-keep { background: #D1FAE5; color: #065F46; }
+        .tag-delete { background: #FEE2E2; color: #991B1B; }
+
+        .modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0, 0, 0, 0.5);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+
+        .modal {
+            background: white;
+            border-radius: 12px;
+            width: 90%;
+            max-width: 650px;
+            max-height: 80vh;
+            display: flex;
+            flex-direction: column;
+            padding: 24px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+        }
+
+        .modal-header { font-size: 1.2rem; font-weight: bold; color: var(--danger); margin-bottom: 8px; }
+        .modal-body { overflow-y: auto; margin: 12px 0; border: 1px solid var(--border); padding: 12px; border-radius: 6px; font-size: 0.85rem; }
+        .modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 12px; }
+        .modal-file-list { margin: 0; padding-left: 20px; line-height: 1.6; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>📁 重複檔案掃描與一鍵刪除工具</h1>
+    <p class="subtitle">離線單機版。比對完成後，切換「保留策略」即可即時動態更新預設勾選項目，不需重新讀檔。</p>
+
+    <div class="drop-zone" id="selectDirBtn">
+        📂 點擊選擇資料夾進行授權與掃描
+    </div>
+
+    <div class="controls">
+        <div class="control-group">
+            <label><strong>1. 檔案類型：</strong></label>
+            <select id="fileFilter" onchange="handleFilterChange()">
+                <option value="all">所有檔案</option>
+                <option value="images">僅照片 (JPG, PNG, GIF, WEBP)</option>
+                <option value="pdf">僅 PDF (.pdf)</option>
+                <option value="excel">僅 Excel (.xlsx, .xls, .csv)</option>
+            </select>
+        </div>
+
+        <div class="control-group">
+            <label><strong>2. 切換預設保留策略：</strong></label>
+            <select id="keepStrategy" onchange="renderResults()">
+                <option value="newest">預設保留「最新」檔案（刪除舊檔）</option>
+                <option value="oldest">預設保留「最舊」檔案（刪除新檔）</option>
+            </select>
+        </div>
+    </div>
+
+    <div class="progress-bar" id="progressBar"><div class="progress" id="progress"></div></div>
+
+    <div class="action-bar" id="actionBar">
+        <div id="summaryText"></div>
+        <button class="btn-danger" onclick="openConfirmModal()">🗑️ 檢查預覽並一鍵刪除</button>
+    </div>
+
+    <div id="results"></div>
+</div>
+
+<!-- 刪除確認 Modal -->
+<div class="modal-overlay" id="confirmModal">
+    <div class="modal">
+        <div class="modal-header">⚠️ 刪除前的最後確認</div>
+        <p style="margin:0; color:#4B5563; font-size:0.88rem;">請仔細核對即將被<strong>永久刪除</strong>的副本檔案清單：</p>
+        <div class="modal-body" id="modalFileList"></div>
+        <div class="modal-footer">
+            <button style="background:#E5E7EB; color:#374151;" onclick="closeConfirmModal()">取消</button>
+            <button class="btn-danger" id="confirmDeleteBtn" onclick="executeDelete()">確認刪除以上勾選檔案</button>
+        </div>
+    </div>
+</div>
+
+<script>
+    const selectDirBtn = document.getElementById('selectDirBtn');
+    const fileFilter = document.getElementById('fileFilter');
+    const keepStrategy = document.getElementById('keepStrategy');
+    const progressBar = document.getElementById('progressBar');
+    const progress = document.getElementById('progress');
+    const actionBar = document.getElementById('actionBar');
+    const summaryText = document.getElementById('summaryText');
+    const results = document.getElementById('results');
+    const confirmModal = document.getElementById('confirmModal');
+    const modalFileList = document.getElementById('modalFileList');
+
+    let rootDirectoryHandle = null;
+    let fileEntries = [];
+    let cachedHashMap = new Map();
+
+    const extMap = {
+        images: ['jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp'],
+        pdf: ['pdf'],
+        excel: ['xlsx', 'xls', 'csv']
+    };
+
+    selectDirBtn.addEventListener('click', async () => {
+        try {
+            rootDirectoryHandle = await window.showDirectoryPicker({ mode: 'readwrite' });
+            scanDirectory();
+        } catch (err) {
+            if (err.name !== 'AbortError') {
+                alert('瀏覽器不支援 FileSystem API 或未授權，請使用 Chrome / Edge。');
+            }
+        }
+    });
+
+    function handleFilterChange() {
+        if (rootDirectoryHandle) scanDirectory();
+    }
+
+    async function scanDirectory() {
+        if (!rootDirectoryHandle) return;
+
+        fileEntries = [];
+        cachedHashMap.clear();
+        progressBar.style.display = 'block';
+        progress.style.width = '0%';
+        results.innerHTML = '';
+        actionBar.style.display = 'none';
+
+        await readDirectoryRecursive(rootDirectoryHandle, '');
+
+        const selectedFilter = fileFilter.value;
+        const filteredEntries = fileEntries.filter(entry => {
+            const ext = entry.file.name.split('.').pop().toLowerCase();
+            if (selectedFilter === 'all') return true;
+            return extMap[selectedFilter].includes(ext);
+        });
+
+        if (filteredEntries.length === 0) {
+            alert('沒有符合條件的檔案！');
+            progressBar.style.display = 'none';
+            return;
+        }
+
+        let processedCount = 0;
+
+        for (const entry of filteredEntries) {
+            const hash = await calculateHash(entry.file);
+            if (!cachedHashMap.has(hash)) {
+                cachedHashMap.set(hash, []);
+            }
+            cachedHashMap.get(hash).push(entry);
+
+            processedCount++;
+            progress.style.width = `${(processedCount / filteredEntries.length) * 100}%`;
+        }
+
+        setTimeout(() => progressBar.style.display = 'none', 300);
+        renderResults();
+    }
+
+    async function readDirectoryRecursive(directoryHandle, path) {
+        for await (const entry of directoryHandle.values()) {
+            const currentPath = path ? `${path}/${entry.name}` : entry.name;
+            if (entry.kind === 'file') {
+                const file = await entry.getFile();
+                fileEntries.push({
+                    file: file,
+                    handle: entry,
+                    parentHandle: directoryHandle,
+                    path: currentPath,
+                    lastModified: file.lastModified
+                });
+            } else if (entry.kind === 'directory') {
+                await readDirectoryRecursive(entry, currentPath);
+            }
+        }
+    }
+
+    async function calculateHash(file) {
+        const buffer = await file.arrayBuffer();
+        const hashBuffer = await crypto.subtle.digest('SHA-256', buffer);
+        const hashArray = Array.from(new Uint8Array(hashBuffer));
+        return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+    }
+
+    function getFileTypeCategory(ext) {
+        ext = ext.toLowerCase();
+        if (extMap.images.includes(ext)) return { name: '照片', class: 'tag-img' };
+        if (extMap.pdf.includes(ext)) return { name: 'PDF', class: 'tag-pdf' };
+        if (extMap.excel.includes(ext)) return { name: 'Excel', class: 'tag-excel' };
+        return { name: '其他', class: 'tag-other' };
+    }
+
+    // 💡 關鍵修正：透過 DOM 事件直接重算記憶體數值並重印
+    function renderResults() {
+        if (cachedHashMap.size === 0) return;
+
+        let duplicateGroups = 0;
+        results.innerHTML = '';
+        const strategy = keepStrategy.value;
+
+        cachedHashMap.forEach((entries) => {
+            if (entries.length > 1) {
+                duplicateGroups++;
+                const fileSize = entries[0].file.size;
+                const wasted = fileSize * (entries.length - 1);
+
+                // 依據保留策略重新排序：'newest' 保留最新（新在前面），'oldest' 保留最舊（舊在前面）
+                entries.sort((a, b) => strategy === 'newest' ? b.lastModified - a.lastModified : a.lastModified - b.lastModified);
+
+                const ext = entries[0].file.name.split('.').pop();
+                const category = getFileTypeCategory(ext);
+
+                const groupDiv = document.createElement('div');
+                groupDiv.className = 'result-group';
+
+                let groupHTML = `
+                    <div class="group-header">
+                        <span><span class="tag ${category.class}">${category.name}</span> 重複組 (${entries.length} 個檔案)</span>
+                        <span>單檔大小: ${formatBytes(fileSize)} | 可釋放: ${formatBytes(wasted)}</span>
+                    </div>
+                `;
+
+                entries.forEach((entry, idx) => {
+                    const isKeep = (idx === 0);
+                    const fileDate = new Date(entry.lastModified).toLocaleString();
+
+                    groupHTML += `
+                        <div class="file-item">
+                            <div class="file-info">
+                                ${isKeep 
+                                    ? `<span class="tag tag-keep">保留 (${strategy === 'newest' ? '最新' : '最舊'})</span>` 
+                                    : `<input type="checkbox" class="delete-checkbox" checked data-path="${entry.path}" onchange="updateSummaryText()">
+                                       <span class="tag tag-delete">刪除副本</span>`
+                                }
+                                <strong>${entry.file.name}</strong>
+                            </div>
+                            <div class="file-meta">
+                                <span>📅 ${fileDate}</span>
+                                <span>📁 ${entry.path}</span>
+                            </div>
+                        </div>
+                    `;
+                });
+
+                groupDiv.innerHTML = groupHTML;
+                results.appendChild(groupDiv);
+            }
+        });
+
+        if (duplicateGroups > 0) {
+            actionBar.style.display = 'flex';
+            updateSummaryText();
+        } else {
+            actionBar.style.display = 'none';
+            results.innerHTML = '<div style="text-align:center; padding:40px; color:#10B981; font-weight:bold;">✅ 沒有發現任何重複檔案。</div>';
+        }
+    }
+
+    function updateSummaryText() {
+        const checkboxes = document.querySelectorAll('.delete-checkbox:checked');
+        let totalBytes = 0;
+
+        checkboxes.forEach(cb => {
+            const path = cb.getAttribute('data-path');
+            const entry = fileEntries.find(e => e.path === path);
+            if (entry) totalBytes += entry.file.size;
+        });
+
+        summaryText.innerHTML = `已勾選 <strong>${checkboxes.length}</strong> 個副本檔案，預計可釋放約 <strong>${formatBytes(totalBytes)}</strong> 空間。`;
+    }
+
+    function openConfirmModal() {
+        const checkboxes = document.querySelectorAll('.delete-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert('目前沒有勾選任何要刪除的檔案！');
+            return;
+        }
+
+        let html = '<ul class="modal-file-list">';
+        checkboxes.forEach(cb => {
+            const path = cb.getAttribute('data-path');
+            html += `<li style="margin-bottom:8px;">❌ <strong style="color:#B91C1C;">[刪除]</strong> ${path}</li>`;
+        });
+        html += '</ul>';
+
+        modalFileList.innerHTML = html;
+        confirmModal.style.display = 'flex';
+    }
+
+    function closeConfirmModal() {
+        confirmModal.style.display = 'none';
+    }
+
+    async function executeDelete() {
+        const checkboxes = document.querySelectorAll('.delete-checkbox:checked');
+        let deletedCount = 0;
+
+        document.getElementById('confirmDeleteBtn').disabled = true;
+
+        for (const cb of checkboxes) {
+            const pathToDelete = cb.getAttribute('data-path');
+            const entryToDelete = fileEntries.find(e => e.path === pathToDelete);
+
+            if (entryToDelete) {
+                try {
+                    await entryToDelete.parentHandle.removeEntry(entryToDelete.handle.name);
+                    deletedCount++;
+                } catch (err) {
+                    console.error(`刪除失敗: ${pathToDelete}`, err);
+                }
+            }
+        }
+
+        document.getElementById('confirmDeleteBtn').disabled = false;
+        closeConfirmModal();
+        alert(`🎉 成功刪除 ${deletedCount} 個檔案！`);
+        scanDirectory();
+    }
+
+    function formatBytes(bytes) {
+        if (bytes === 0) return '0 Bytes';
+        const k = 1024;
+        const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    }
+</script>
+
+</body>
+</html>
